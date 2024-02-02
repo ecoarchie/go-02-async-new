@@ -44,7 +44,7 @@ func SelectUsers(in, out chan interface{}) {
 		}(email.(string))
 	}
 	wg.Wait()
-	clear(set)
+	clear(set) // do I need this?
 }
 
 func GetMessagesForUsers(users []User, out chan interface{}, wg *sync.WaitGroup) {
@@ -63,8 +63,7 @@ func SelectMessages(in, out chan interface{}) {
 	wg := &sync.WaitGroup{}
 	users := []User{}
 	for u := range in {
-		user := u.(User)
-		users = append(users, user)
+		users = append(users, u.(User))
 		if len(users) == GetMessagesMaxUsersBatch {
 			wg.Add(1)
 			go GetMessagesForUsers(users, out, wg)
@@ -83,7 +82,6 @@ func CheckSpam(in, out chan interface{}) {
 	quotaChan := make(chan struct{}, HasSpamMaxAsyncRequests)
 	for msg := range in {
 		wg.Add(1)
-		msgID := msg.(MsgID)
 
 		go func(id MsgID, quota chan struct{}, wg *sync.WaitGroup) {
 			defer wg.Done()
@@ -98,7 +96,7 @@ func CheckSpam(in, out chan interface{}) {
 
 			msgData := MsgData{ID: id, HasSpam: hasSpam}
 			out <- msgData
-		}(msgID, quotaChan, wg)
+		}(msg.(MsgID), quotaChan, wg)
 	}
 	wg.Wait()
 }
@@ -106,7 +104,6 @@ func CheckSpam(in, out chan interface{}) {
 func CombineResults(in, out chan interface{}) {
 	trues := []MsgData{}
 	falses := []MsgData{}
-	results := []string{}
 	for s := range in {
 		v := s.(MsgData)
 		if v.HasSpam {
@@ -125,16 +122,13 @@ func CombineResults(in, out chan interface{}) {
 	for _, v := range trues {
 		id := strconv.FormatUint(uint64(v.ID), 10)
 		b := strconv.FormatBool(v.HasSpam)
-		results = append(results, b + " " + id)
+		out <- b + " " + id
 
 	}
 	for _, v := range falses {
 		id := strconv.FormatUint(uint64(v.ID), 10)
 		b := strconv.FormatBool(v.HasSpam)
-		results = append(results, b + " " + id)
+		out <- b + " " + id
 
-	}
-	for _, b := range results {
-		out <- b
 	}
 }
